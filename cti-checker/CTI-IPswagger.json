@@ -15,23 +15,25 @@
   },
   {
     "name" : "Credential Checker",
-    "description" : "Operations to check if a username or password has been used by bot in our honeyPot"
+    "description" : "Operations to check if a username or password has been used by bot in our HoneyPot"
   },
   {
     "name" : "Chart Generator",
-    "description" : "Generates a chart that indicates the occurancy of an IP Address or Credential in our ressources - grouped by days/weeks/months"
+    "description" : "Generates a chart that indicates the occurrence of an IP Address or Credential in our resources - grouped by days/weeks/months"
+  },{
+    "name": "Analysis",
+    "description":"Analyze IP address integrate LLM"
   }
 ],
   "paths" : {
     "/chart/address/{ADDRESS}":{
       "get": {
-        "produces": "image/png",
-        "description": "Chart generator (days X number of resources that listed the dangerous address) - grouped by days/weeks/mounths",
+        "description": "Chart generator (days X number of resources that listed the dangerous address) - grouped by days/weeks/months",
         "tags" : [ "Chart Generator" ],
         "parameters" : [ {
           "in" : "path",
           "name" : "ADDRESS",
-          "description" : "pass the IP address to generate a chart (days X number of resources that listed the IP) [hole periode]",
+          "description" : "pass the IP address to generate a chart (days X number of resources that listed the IP) [whole period]",
           "required" : true,
           "schema" : {
             "type" : "string"
@@ -51,20 +53,23 @@
         ],
         "responses": {
           "200": {
-            "description": "Returns the Chart Generated in a PNG file"
+            "description": "Returns the Chart Generated in a PNG file",
+            "content": {
+              "image/png": {}
+            }
           }
         }
       }
     },
     "/chartPath/address/{ADDRESS}":{
       "get": {
-        "produces": "image path",
-        "description": "Chart generator (days X number of resources that listed the dangerous address) - grouped by days/weeks/mounths",
+
+        "description": "Chart generator (days X number of resources that listed the dangerous address) - grouped by days/weeks/months",
         "tags" : [ "Chart Generator" ],
         "parameters" : [ {
           "in" : "path",
           "name" : "ADDRESS",
-          "description" : "pass the IP address to generate a chart (days X number of resources that listed the IP) [hole periode]",
+          "description" : "pass the IP address to generate a chart (days X number of resources that listed the IP) [whole period]",
           "required" : true,
           "schema" : {
             "type" : "string"
@@ -84,20 +89,22 @@
         ],
         "responses": {
           "200": {
-            "description": "Returns the Chart Generated in a PNG file"
+            "description": "Returns the Chart Generated in a PNG file",
+            "content": {
+              "image path": {}
+            }
           }
         }
       }
     },
     "/chart/credential/{CREDENTIAL}":{
       "get": {
-        "produces": "image/png",
-        "description": "Chart generator (days X number of attempts to login using the given credential in our honeyPot) - grouped by days/weeks/months",
+        "description": "Chart generator (days X number of attempts to login using the given credential in our HoneyPot) - grouped by days/weeks/months",
         "tags" : [ "Chart Generator" ],
         "parameters" : [ {
           "in" : "path",
           "name" : "CREDENTIAL",
-          "description" : "pass the credential to generate a chart (days X of attempts to login using the given credential in our honeyPot) [hole periode]",
+          "description" : "pass the credential to generate a chart (days X of attempts to login using the given credential in our HoneyPot) [whole period]",
           "required" : true,
           "schema" : {
             "type" : "string"
@@ -117,7 +124,10 @@
         ],
         "responses": {
           "200": {
-            "description": "Returns the Chart Generated in a PNG file"
+            "description": "Returns the Chart Generated in a PNG file",
+            "content": {
+              "image/png": {}
+            }
           }
         }
       }
@@ -271,7 +281,7 @@
         "parameters" : [ {
           "in" : "path",
           "name" : "USERNAME",
-          "description" : "pass the USERNAME to be ckecked in our database",
+          "description" : "pass the USERNAME to be checked in our database",
           "required" : true,
           "schema" : {
             "type" : "string"
@@ -296,7 +306,166 @@
           }
         }
       }
+    },
+    "/analysis/": {
+      "post": {
+        "tags" : [ "Analysis" ],
+        "summary": "Analyze IP address using fetch data and Gemma",
+        "operationId": "analyzeIP",
+        "description": "By passing in the appropriate options (IP,User prompt in Request body), you can get \nthe answer generate by Gemma.\n",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "ipAddress": {
+                    "type": "string",
+                    "example": "192.168.1.1"
+                  },
+                  "userPrompt":{
+                    "type":"string",
+                    "example": "Please analyze the following IP address and provide a brief reputation report"
+                  }
+                },
+                "required": ["ipAddress"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Analysis result",
+            "content": {
+              "application/json": {
+                "example": {
+                  "IP Data": {},
+                  "Result": "Some analysis result here"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          }
+        }
+      }
+    },
+    "/analysis/feedback": {
+      "post": {
+        "tags": ["Analysis"],
+        "summary": "Submit user feedback on the LLM analysis result",
+        "description": "Allows users to give feedback on the IP analysis result generated by the LLM.",
+        "operationId": "feedback",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "ipAddress": {
+                    "type": "string",
+                    "example": "8.8.8.8"
+                  },
+                  "summary": {
+                    "type": "string",
+                    "example": "This IP is clean and belongs to Google."
+                  },
+                  "rating": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 5,
+                    "example": 4
+                  },
+                  "feedback": {
+                    "type": "string",
+                    "example": "Simple and clear explanation."
+                  }
+                },
+                "required": ["ipAddress", "summary", "rating"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Feedback submitted successfully"
+          },
+          "400": {
+            "description": "Bad request"
+          }
+        }
+      }
+    },
+    "/analysis/getFeedback": {
+    "get": {
+      "tags": ["Analysis"],
+      "summary": "Retrieve feedback for IP analysis results",
+      "description": "Fetch user feedbacks optionally filtered by IP address, type (best/worst/latest), and result limit.",
+      "parameters": [
+        {
+          "in": "query",
+          "name": "ipAddress",
+          "required": false,
+          "description": "IP address to filter feedback",
+          "schema": {
+            "type": "string",
+            "example": "8.8.8.8"
+          }
+        },
+        {
+          "in": "query",
+          "name": "type",
+          "required": false,
+          "description": "Type of feedback to retrieve (best, worst, latest)",
+          "schema": {
+            "type": "string",
+            "enum": ["best", "worst", "latest"],
+            "default": "latest"
+          }
+        },
+        {
+          "in": "query",
+          "name": "limit",
+          "required": false,
+          "description": "Number of feedback results to return",
+          "schema": {
+            "type": "integer",
+            "default": 3
+          }
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "List of feedback entries",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "ipAddress": { "type": "string" },
+                    "summary": { "type": "string" },
+                    "rating": { "type": "number" },
+                    "feedback": { "type": "string" },
+                    "timestamp": { "type": "string", "format": "date-time" }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "500": {
+          "description": "Failed to retrieve feedback"
+        }
+      }
     }
+  }
+
+
   },
   "components" : {
     "schemas" : {
@@ -378,9 +547,7 @@
             }
           }
         }
-      }        
-      
-      
+      }              
     }
   }
 },

@@ -1,1 +1,2 @@
 pm2 start index.js
+gunicorn -w 2 app:app --bind 51.178.36.152:5000

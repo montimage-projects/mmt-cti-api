@@ -2,6 +2,7 @@
 const express = require("express")
 const cors = require("cors")
 const addressCheckerRouter = require("./routes/addressRoutes")
+const ipAnalysisRouter = require("./routes/ipAnalysis");
 const credentialCheckerRouter = require("./routes/credentialRoutes")
 const chartGenerator = require('./routes/chartRoutes')
 const swaggerUI = require("swagger-ui-express")
@@ -26,6 +27,8 @@ app.use('/imgs', express.static('imgs'));
 
 // apply address checking routes
 app.use("/", addressCheckerRouter)
+// apply IP analysis routes
+app.use("/", ipAnalysisRouter)
 // apply credential checking routes
 app.use("/", credentialCheckerRouter)
 // Chart path
