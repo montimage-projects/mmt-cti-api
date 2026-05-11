@@ -118,7 +118,7 @@ router.get("/chart/address/:ADDRESS", async (req, res) => {
     
     if(ipPattern.test(ADDRESS) || subnetPattern.test(ADDRESS) || domainPattern.test(ADDRESS)){
         
-        const addressCheckerResponse = await axios.get(`http://51.178.36.152:4000/address/${ADDRESS}`)
+        const addressCheckerResponse = await axios.get(`http://127.0.0.1:4000/check/${ADDRESS}`)
         
         try {
             const data = addressCheckerResponse.data
@@ -158,7 +158,7 @@ router.get("/chartPath/address/:ADDRESS", async (req, res) => {
     
     if(ipPattern.test(ADDRESS) || subnetPattern.test(ADDRESS) || domainPattern.test(ADDRESS)){
         
-        const addressCheckerResponse = await axios.get(`http://51.178.36.152:4000/address/${ADDRESS}`)
+        const addressCheckerResponse = await axios.get(`http://127.0.0.1:4000/check/${ADDRESS}`)
         
         try {
             const data = addressCheckerResponse.data;
@@ -182,8 +182,8 @@ router.get("/chart/credential/:CREDENTIAL", async (req, res) => {
     const { GROUPBY } = req.query;
         
     try {
-        const passwordResponse = await axios.get(`http://51.178.36.152:4000/password/${CREDENTIAL}`)
-        const usernameResponse = await axios.get(`http://51.178.36.152:4000/username/${CREDENTIAL}`)
+        const passwordResponse = await axios.get(`http://127.0.0.1:4000/password/${CREDENTIAL}`)
+        const usernameResponse = await axios.get(`http://127.0.0.1:4000/username/${CREDENTIAL}`)
         
         
         const data = passwordResponse.data.concat(usernameResponse.data)

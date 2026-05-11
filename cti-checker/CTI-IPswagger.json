@@ -1,662 +1,644 @@
-{"definition": {
-  "openapi" : "3.1.0",
-  "servers" : [ {
-    "description" : "CTI Check API",
-    "url" : "http://localhost:4000"
-  } ],
-  "info" : {
-    "description" : "API to check CTI available info.",
-    "version" : "1.0.0",
-    "title" : "Cyber Threat Intelligence Checker"
-  },
-  "tags" : [ {
-    "name" : "Address Checker",
-    "description" : "Operations to check if an IP is in a black-list"
-  },
 {
-    "name": "Address Checker",
-    "description": "Operations to check if an IP is in a black-list"
-  },
-  {
-    "name": "STIX Import",
-    "description": "Operations to receive STIX bundles from partners"
-  },
-  {
-    "name" : "Chart Generator",
-    "description" : "Generates a chart that indicates the occurrence of an IP Address or Credential in our resources - grouped by days/weeks/months"
-  },{
-    "name": "Analysis",
-    "description":"Analyze IP address integrate LLM"
-  }
-],
-  "paths" : {
-    "/chart/address/{ADDRESS}":{
-      "get": {
-        "description": "Chart generator (days X number of resources that listed the dangerous address) - grouped by days/weeks/months",
-        "tags" : [ "Chart Generator" ],
-        "parameters" : [ {
-          "in" : "path",
-          "name" : "ADDRESS",
-          "description" : "pass the IP address to generate a chart (days X number of resources that listed the IP) [whole period]",
-          "required" : true,
-          "schema" : {
-            "type" : "string"
-            }
-          },
-          {
-            "in" : "query",
-            "name" : "GROUPBY",
-            "description" : "pass the type of groupBy for the chart [day, week, month], if empty chart will group by day",
-            "required" : false,
-            "schema" : {
-              "type" : "string",
-              "example":"day"
-              
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Returns the Chart Generated in a PNG file",
-            "content": {
-              "image/png": {}
-            }
-          }
-        }
+  "definition": {
+    "openapi": "3.1.0",
+    "servers": [
+      {
+        "description": "Public deployment",
+        "url": "https://cti.montimage.eu"
+      },
+      {
+        "description": "Local development",
+        "url": "http://localhost:4000"
+      }
+    ],
+    "info": {
+      "title": "Montimage CTI Checker API",
+      "version": "1.0.0",
+      "description": "REST API for **Montimage's Cyber Threat Intelligence (CTI) Checker**.\n\nThe service exposes the data collected by the Montimage CTI framework — malicious IPs and subnets aggregated from public blocklists (Spamhaus, DShield, CINS, Emerging Threats, Feodo Tracker, blocklist.de), honeypot probes (Dionaea for malware capture, Heralding for credential capture) and partner threat-intel feeds (AbuseIPDB). It also produces time-series visualisations, accepts STIX 2.1 bundles from partners, and provides LLM-powered reputation analysis on top of the aggregated data.\n\n## Common workflows\n- **Is this address dangerous?** → `GET /check/{address}` (IP, CIDR subnet or domain)\n- **Has this credential been seen on our honeypots?** → `GET /password/{value}` or `GET /username/{value}`\n- **How often has this address been observed over time?** → `GET /chart/address/{address}` (PNG) or `GET /chartPath/address/{address}` (URL)\n- **Get an LLM-generated reputation report** → `POST /analysis/`\n- **Push STIX 2.1 bundles** → `POST /stix` (requires `X-API-Key`)\n\n## Conventions\n- All endpoints return JSON unless explicitly documented otherwise (chart PNGs).\n- Path parameters containing a `/` (CIDR subnets) **must be URL-encoded** — pass `192.168.0.0/24` as `192.168.0.0%2F24`.\n- An empty `[]` response means the lookup succeeded but no records matched — it does **not** indicate an error.",
+      "contact": {
+        "name": "Montimage",
+        "url": "https://www.montimage.com"
       }
     },
-    "/chartPath/address/{ADDRESS}":{
-      "get": {
-
-        "description": "Chart generator (days X number of resources that listed the dangerous address) - grouped by days/weeks/months",
-        "tags" : [ "Chart Generator" ],
-        "parameters" : [ {
-          "in" : "path",
-          "name" : "ADDRESS",
-          "description" : "pass the IP address to generate a chart (days X number of resources that listed the IP) [whole period]",
-          "required" : true,
-          "schema" : {
-            "type" : "string"
+    "tags": [
+      {
+        "name": "Address Checker",
+        "description": "Look up IP addresses, CIDR subnets, and domain names against the aggregated dangerous-host database (over 1,000 records sourced from public blocklists and Montimage honeypots)."
+      },
+      {
+        "name": "Credential Checker",
+        "description": "Look up usernames and passwords observed on Montimage's credential-capture honeypots (Heralding). Useful for password-hygiene checks and threat hunting."
+      },
+      {
+        "name": "Chart Generator",
+        "description": "Render time-series charts (PNG line graphs) showing how often a given address or credential has been observed, grouped by day, week or month."
+      },
+      {
+        "name": "Analysis",
+        "description": "LLM-powered reputation analysis for IP addresses. Aggregates multi-source intelligence, generates a human-readable report via a local Gemma 3 model, and lets users submit and retrieve feedback to improve future analyses."
+      },
+      {
+        "name": "STIX Import",
+        "description": "Accept STIX 2.1 bundles from authenticated partner systems for ingestion into the threat database. Supports vulnerability, identity, report, threat-actor, malware and other STIX object types."
+      }
+    ],
+    "paths": {
+      "/check/{ADDRESS}": {
+        "get": {
+          "tags": ["Address Checker"],
+          "summary": "Check an IP, subnet or domain",
+          "operationId": "checkAddress",
+          "description": "Looks up the supplied address against the dangerous-host database. The input may be:\n- an **IPv4 address** (e.g. `8.8.8.8`) — exact match plus any flagged subnet that contains it,\n- a **CIDR subnet** (e.g. `192.168.0.0/24`) — pass the `/` URL-encoded as `%2F`,\n- a **domain name** (e.g. `example.com`) — resolved to an IPv4 via DNS, then checked as an IP.\n\nReturns an array of source records (empty if not flagged).",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "ADDRESS",
+              "description": "IPv4 address, CIDR subnet (URL-encoded), or domain name.",
+              "required": true,
+              "schema": { "type": "string", "example": "8.8.8.8" }
             }
-          },
-          {
-            "in" : "query",
-            "name" : "GROUPBY",
-            "description" : "pass the type of groupBy for the chart [day, week, month], if empty chart will group by day",
-            "required" : false,
-            "schema" : {
-              "type" : "string",
-              "example":"day"
-              
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Returns the Chart Generated in a PNG file",
-            "content": {
-              "image path": {}
-            }
+          ],
+          "responses": {
+            "200": {
+              "description": "Array of source records matching the address (empty array if not flagged).",
+              "content": {
+                "application/json": {
+                  "schema": { "type": "array", "items": { "$ref": "#/components/schemas/AddressItem" } }
+                }
+              }
+            },
+            "400": { "description": "The supplied value is not a valid IPv4 address, CIDR subnet, or domain." },
+            "500": { "description": "Internal error (e.g. database unreachable, DNS lookup failed)." }
           }
         }
-      }
-    },
-    "/chart/credential/{CREDENTIAL}":{
-      "get": {
-        "description": "Chart generator (days X number of attempts to login using the given credential in our HoneyPot) - grouped by days/weeks/months",
-        "tags" : [ "Chart Generator" ],
-        "parameters" : [ {
-          "in" : "path",
-          "name" : "CREDENTIAL",
-          "description" : "pass the credential to generate a chart (days X of attempts to login using the given credential in our HoneyPot) [whole period]",
-          "required" : true,
-          "schema" : {
-            "type" : "string"
+      },
+      "/ip/{IP}": {
+        "get": {
+          "tags": ["Address Checker"],
+          "summary": "Check an IPv4 address (exact match, ignores subnets)",
+          "operationId": "searchIP",
+          "description": "Looks up an exact IPv4 address. Unlike `/check`, this endpoint does **not** consider subnet entries — use it when you specifically want to know whether the IP itself has been reported, not whether it falls within a flagged CIDR range.",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "IP",
+              "description": "IPv4 address to look up.",
+              "required": true,
+              "schema": { "type": "string", "example": "8.8.8.8" }
             }
-          },
-          {
-            "in" : "query",
-            "name" : "GROUPBY",
-            "description" : "pass the type of groupBy for the chart [day, week, month], if empty chart will group by day",
-            "required" : false,
-            "schema" : {
-              "type" : "string",
-              "example":"day"
-              
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Returns the Chart Generated in a PNG file",
-            "content": {
-              "image/png": {}
-            }
+          ],
+          "responses": {
+            "200": {
+              "description": "Array of source records that explicitly list the IP.",
+              "content": {
+                "application/json": {
+                  "schema": { "type": "array", "items": { "$ref": "#/components/schemas/AddressItem" } }
+                }
+              }
+            },
+            "400": { "description": "Invalid IPv4 address." },
+            "500": { "description": "Internal error." }
           }
         }
-      }
-    },
-    "/check/{ADDRESS}" : {
-      "get" : {
-        "tags" : [ "Address Checker" ],
-        "summary" : "Unified endpoint to check IP, subnet, or domain",
-        "operationId" : "checkAddress",
-        "description" : "Checks if the given address (IPv4, subnet, or domain) exists in the dangerous IP database. Supports DNS resolution for domains and subnet matching for IPs.",
-        "parameters" : [ {
-          "in" : "path",
-          "name" : "ADDRESS",
-          "description" : "pass an IP address, subnet (CIDR), or domain name to be checked",
-          "required" : true,
-          "schema" : {
-            "type" : "string",
-            "example" : "192.168.1.1"
+      },
+      "/subnet/{SUBNET}": {
+        "get": {
+          "tags": ["Address Checker"],
+          "summary": "Check a CIDR subnet",
+          "operationId": "searchSubnet",
+          "description": "Looks up an exact CIDR subnet entry (e.g. `192.168.0.0/24`).\n\n**Important:** the `/` in the CIDR notation must be URL-encoded as `%2F`. For example: `/subnet/192.168.0.0%2F24`.",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "SUBNET",
+              "description": "CIDR subnet, with the slash URL-encoded as `%2F`.",
+              "required": true,
+              "schema": { "type": "string", "example": "192.168.0.0%2F24" }
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "Array of source records matching the subnet.",
+              "content": {
+                "application/json": {
+                  "schema": { "type": "array", "items": { "$ref": "#/components/schemas/AddressItem" } }
+                }
+              }
+            },
+            "400": { "description": "Invalid CIDR subnet format." },
+            "500": { "description": "Internal error." }
           }
-        } ],
-        "responses" : {
-          "200" : {
-            "description" : "search results matching the address",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "type" : "array",
-                  "items" : {
-                    "$ref" : "#/components/schemas/AddressItem"
+        }
+      },
+      "/password/{PASSWORD}": {
+        "get": {
+          "tags": ["Credential Checker"],
+          "summary": "Check whether a password appears in honeypot captures",
+          "operationId": "searchPassword",
+          "description": "Returns every credential-capture record in which the supplied password was attempted by an attacker against a Montimage Heralding honeypot. Useful for password-hygiene checks (\"has my candidate password been seen in the wild?\") and for threat hunting.",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "PASSWORD",
+              "description": "Password value to search for.",
+              "required": true,
+              "schema": { "type": "string", "example": "root" }
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "Array of credential records that include this password.",
+              "content": {
+                "application/json": {
+                  "schema": { "type": "array", "items": { "$ref": "#/components/schemas/CredentialItem" } }
+                }
+              }
+            },
+            "400": { "description": "Empty or invalid password parameter." },
+            "500": { "description": "Internal error." }
+          }
+        }
+      },
+      "/username/{USERNAME}": {
+        "get": {
+          "tags": ["Credential Checker"],
+          "summary": "Check whether a username appears in honeypot captures",
+          "operationId": "searchUsername",
+          "description": "Returns every credential-capture record in which the supplied username was attempted by an attacker against a Montimage Heralding honeypot.",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "USERNAME",
+              "description": "Username value to search for.",
+              "required": true,
+              "schema": { "type": "string", "example": "admin" }
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "Array of credential records that include this username.",
+              "content": {
+                "application/json": {
+                  "schema": { "type": "array", "items": { "$ref": "#/components/schemas/CredentialItem" } }
+                }
+              }
+            },
+            "400": { "description": "Empty or invalid username parameter." },
+            "500": { "description": "Internal error." }
+          }
+        }
+      },
+      "/chart/address/{ADDRESS}": {
+        "get": {
+          "tags": ["Chart Generator"],
+          "summary": "Time-series PNG chart of address occurrences",
+          "operationId": "chartAddress",
+          "description": "Generates a PNG line chart showing how many sources have listed the given IP, subnet or domain over time, grouped by day, week or month.\n\nUnderneath, the endpoint calls `/check/{ADDRESS}` to gather all source records and then aggregates them into a time series rendered with Chart.js.",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "ADDRESS",
+              "description": "IPv4 address, CIDR subnet (URL-encoded) or domain name.",
+              "required": true,
+              "schema": { "type": "string", "example": "8.8.8.8" }
+            },
+            {
+              "in": "query",
+              "name": "GROUPBY",
+              "description": "Aggregation interval. Defaults to `day` when omitted.",
+              "required": false,
+              "schema": { "type": "string", "enum": ["day", "week", "month"], "default": "day" }
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "PNG image of the chart.",
+              "content": { "image/png": {} }
+            },
+            "400": { "description": "Invalid address parameter or internal rendering error." }
+          }
+        }
+      },
+      "/chartPath/address/{ADDRESS}": {
+        "get": {
+          "tags": ["Chart Generator"],
+          "summary": "Time-series chart of address occurrences (returns URL)",
+          "operationId": "chartAddressPath",
+          "description": "Identical to `/chart/address/{ADDRESS}` but returns the URL path of the rendered PNG (under `/imgs/...`) instead of streaming the image itself. Useful when embedding the chart in a web UI as an `<img>` source without fetching the bytes twice.",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "ADDRESS",
+              "description": "IPv4 address, CIDR subnet (URL-encoded) or domain name.",
+              "required": true,
+              "schema": { "type": "string", "example": "8.8.8.8" }
+            },
+            {
+              "in": "query",
+              "name": "GROUPBY",
+              "description": "Aggregation interval. Defaults to `day` when omitted.",
+              "required": false,
+              "schema": { "type": "string", "enum": ["day", "week", "month"], "default": "day" }
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "JSON object containing the URL path of the rendered chart.",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "imagePath": { "type": "string", "example": "/imgs/chart.png" }
+                    }
                   }
                 }
               }
-            }
-          },
-          "400" : {
-            "description" : "invalid address format"
+            },
+            "400": { "description": "Invalid address parameter or internal rendering error." }
           }
         }
-      }
-    },
-    "/stix" : {
-      "post" : {
-        "tags" : [ "STIX Import" ],
-        "summary" : "Receive STIX bundle from partner",
-        "operationId" : "importStixBundle",
-        "description" : "Upload a STIX 2.1 bundle to import threat intelligence data. Supports vulnerability, identity, report, threat-actor, malware, and other STIX object types. Requires API key authentication.",
-        "security" : [ {
-          "ApiKeyAuth" : [ ]
-        } ],
-        "parameters" : [ {
-          "in" : "header",
-          "name" : "X-API-Key",
-          "description" : "Partner API key required for authentication",
-          "required" : true,
-          "schema" : {
-            "type" : "string",
-            "example" : "partner1-secret-key"
-          }
-        } ],
-        "requestBody" : {
-          "required" : true,
-          "content" : {
-            "application/json" : {
-              "schema" : {
-                "type" : "object",
-                "properties" : {
-                  "type" : {
-                    "type" : "string",
-                    "example" : "bundle"
-                  },
-                  "id" : {
-                    "type" : "string",
-                    "example" : "bundle--eea2e291-965c-58e7-baf6-273ffef87ffa"
-                  },
-                  "objects" : {
-                    "type" : "array",
-                    "items" : {
-                      "type" : "object"
-                    },
-                    "example" : [
-                      {
-                        "type": "vulnerability",
-                        "spec_version": "2.1",
-                        "id": "vulnerability--20dc53e3-c68a-5073-ade6-556bb445e9d3",
-                        "name": "CVE-2025-14847"
-                      }
-                    ]
-                  }
-                },
-                "required" : [ "type", "id" ]
-              }
+      },
+      "/chart/credential/{CREDENTIAL}": {
+        "get": {
+          "tags": ["Chart Generator"],
+          "summary": "Time-series PNG chart of credential occurrences",
+          "operationId": "chartCredential",
+          "description": "Generates a PNG line chart showing how often the given credential (matched against **both** captured usernames and passwords) has been observed over time on Montimage Heralding honeypots, grouped by day, week or month.",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "CREDENTIAL",
+              "description": "Credential value (matched against usernames and passwords).",
+              "required": true,
+              "schema": { "type": "string", "example": "root" }
+            },
+            {
+              "in": "query",
+              "name": "GROUPBY",
+              "description": "Aggregation interval. Defaults to `day` when omitted.",
+              "required": false,
+              "schema": { "type": "string", "enum": ["day", "week", "month"], "default": "day" }
             }
+          ],
+          "responses": {
+            "200": {
+              "description": "PNG image of the chart.",
+              "content": { "image/png": {} }
+            },
+            "400": { "description": "Internal rendering error." }
           }
-        },
-        "responses" : {
-          "200" : {
-            "description" : "STIX bundle imported successfully",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "type" : "object",
-                  "properties" : {
-                    "success" : {
-                      "type" : "boolean"
+        }
+      },
+      "/analysis/": {
+        "post": {
+          "tags": ["Analysis"],
+          "summary": "Generate an LLM-powered reputation report for an IP",
+          "operationId": "analyzeIP",
+          "description": "Aggregates multi-source intelligence about the supplied IP (AbuseIPDB, VirusTotal, Shodan, AlienVault OTX) and feeds it — together with any previously-submitted user feedback for the same IP — to a local Gemma 3 model running on the LLM service.\n\nReturns both the raw multi-source data (`fetchData`) and the generated natural-language analysis (`Result`). Latency typically 2–15 s depending on the model's load.",
+          "requestBody": {
+            "required": true,
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["ipAddress"],
+                  "properties": {
+                    "ipAddress": {
+                      "type": "string",
+                      "description": "IPv4 address to analyse.",
+                      "example": "8.8.8.8"
                     },
-                    "message" : {
-                      "type" : "string"
-                    },
-                    "bundle_id" : {
-                      "type" : "string"
-                    },
-                    "object_count" : {
-                      "type" : "integer"
+                    "userPrompt": {
+                      "type": "string",
+                      "description": "Optional natural-language instruction to bias the analysis (e.g. \"focus on reputation, one short paragraph\"). Defaults to a generic analyse-this-IP prompt.",
+                      "example": "Please analyse this IP and provide a brief reputation report."
                     }
                   }
                 }
               }
             }
           },
-          "400" : {
-            "description" : "Invalid STIX bundle format"
-          },
-          "401" : {
-            "description" : "Missing API key. Provide X-API-Key header."
-          },
-          "403" : {
-            "description" : "Invalid API key"
-          },
-          "500" : {
-            "description" : "Failed to process STIX bundle"
-          }
-        }
-      }
-    },
-    "/ip/{IP}" : {
-      "get" : {
-        "tags" : [ "Address Checker" ],
-        "summary" : "searches database for a matching IP",
-        "operationId" : "searchIP",
-        "description" : "By passing in the appropriate options (IP in path), you can search for\nthe exact given IP in our database, without taking subnets into account.\n",
-        "parameters" : [ {
-          "in" : "path",
-          "name" : "IP",
-          "description" : "pass the IP address to be checked in our database",
-          "required" : true,
-          "schema" : {
-            "type" : "string"
-          }
-        } ],
-        "responses" : {
-          "200" : {
-            "description" : "search results matching the same IP",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "type" : "array",
-                  "items" : {
-                    "$ref" : "#/components/schemas/AddressItem"
+          "responses": {
+            "200": {
+              "description": "Analysis result.",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "fetchData": {
+                        "type": "object",
+                        "description": "Raw multi-source data gathered for the IP."
+                      },
+                      "Result": {
+                        "type": "string",
+                        "description": "LLM-generated reputation report (Markdown-formatted plain text)."
+                      }
+                    }
                   }
                 }
               }
-            }
-          },
-          "400" : {
-            "description" : "bad input parameter"
-          }
-        }
-      }
-    },
-    "/subnet/{SUBNET}" : {
-      "get" : {
-        "tags" : [ "Address Checker" ],
-        "summary" : "searches database for a matching SUBNET",
-        "operationId" : "searchSubnet",
-        "description" : "By passing in the appropriate options (SUBNET in path), you can search for\nthe exact given SUBNET in our database.\n",
-        "parameters" : [ {
-          "in" : "path",
-          "name" : "SUBNET",
-          "description" : "pass the SUBNET address to be checked in our database",
-          "required" : true,
-          "schema" : {
-            "type" : "string"
-          }
-        } ],
-        "responses" : {
-          "200" : {
-            "description" : "search results matching the same SUBNET",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "type" : "array",
-                  "items" : {
-                    "$ref" : "#/components/schemas/AddressItem"
-                  }
-                }
-              }
-            }
-          },
-          "400" : {
-            "description" : "bad input parameter"
-          }
-        }
-      }
-    },
-    "/password/{PASSWORD}" : {
-      "get" : {
-        "tags" : [ "Credential Checker" ],
-        "summary" : "searches database for a matching PASSWORD",
-        "operationId" : "searchPassword",
-        "description" : "By passing in the appropriate options (PASSWORD in path), you can search for\nthe exact given PASSWORD in our database.\n",
-        "parameters" : [ {
-          "in" : "path",
-          "name" : "PASSWORD",
-          "description" : "pass the PASSWORD to be checked in our database",
-          "required" : true,
-          "schema" : {
-            "type" : "string"
-          }
-        } ],
-        "responses" : {
-          "200" : {
-            "description" : "search results matching the same PASSWORD",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "type" : "array",
-                  "items" : {
-                    "$ref" : "#/components/schemas/CredentialItem"
-                  }
-                }
-              }
-            }
-          },
-          "400" : {
-            "description" : "bad input parameter"
-          }
-        }
-      }
-    },
-    "/username/{USERNAME}" : {
-      "get" : {
-        "tags" : [ "Credential Checker" ],
-        "summary" : "searches database for a matching USERNAME",
-        "operationId" : "searchUsername",
-        "description" : "By passing in the appropriate options (USERNAME in path), you can search for\nthe exact given USERNAME in our database.\n",
-        "parameters" : [ {
-          "in" : "path",
-          "name" : "USERNAME",
-          "description" : "pass the USERNAME to be checked in our database",
-          "required" : true,
-          "schema" : {
-            "type" : "string"
-          }
-        } ],
-        "responses" : {
-          "200" : {
-            "description" : "search results matching the same USERNAME",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "type" : "array",
-                  "items" : {
-                    "$ref" : "#/components/schemas/CredentialItem"
-                  }
-                }
-              }
-            }
-          },
-          "400" : {
-            "description" : "bad input parameter"
-          }
-        }
-      }
-    },
-    "/analysis/": {
-      "post": {
-        "tags" : [ "Analysis" ],
-        "summary": "Analyze IP address using fetch data and Gemma",
-        "operationId": "analyzeIP",
-        "description": "By passing in the appropriate options (IP,User prompt in Request body), you can get \nthe answer generate by Gemma.\n",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "ipAddress": {
-                    "type": "string",
-                    "example": "192.168.1.1"
-                  },
-                  "userPrompt":{
-                    "type":"string",
-                    "example": "Please analyze the following IP address and provide a brief reputation report"
-                  }
-                },
-                "required": ["ipAddress"]
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Analysis result",
-            "content": {
-              "application/json": {
-                "example": {
-                  "IP Data": {},
-                  "Result": "Some analysis result here"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid request"
-          }
-        }
-      }
-    },
-    "/analysis/feedback": {
-      "post": {
-        "tags": ["Analysis"],
-        "summary": "Submit user feedback on the LLM analysis result",
-        "description": "Allows users to give feedback on the IP analysis result generated by the LLM.",
-        "operationId": "feedback",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "ipAddress": {
-                    "type": "string",
-                    "example": "8.8.8.8"
-                  },
-                  "summary": {
-                    "type": "string",
-                    "example": "This IP is clean and belongs to Google."
-                  },
-                  "rating": {
-                    "type": "integer",
-                    "minimum": 1,
-                    "maximum": 5,
-                    "example": 4
-                  },
-                  "feedback": {
-                    "type": "string",
-                    "example": "Simple and clear explanation."
-                  }
-                },
-                "required": ["ipAddress", "summary", "rating"]
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Feedback submitted successfully"
-          },
-          "400": {
-            "description": "Bad request"
-          }
-        }
-      }
-    },
-    "/analysis/getFeedback": {
-    "get": {
-      "tags": ["Analysis"],
-      "summary": "Retrieve feedback for IP analysis results",
-      "description": "Fetch user feedbacks optionally filtered by IP address, type (best/worst/latest), and result limit.",
-      "parameters": [
-        {
-          "in": "query",
-          "name": "ipAddress",
-          "required": false,
-          "description": "IP address to filter feedback",
-          "schema": {
-            "type": "string",
-            "example": "8.8.8.8"
-          }
-        },
-        {
-          "in": "query",
-          "name": "type",
-          "required": false,
-          "description": "Type of feedback to retrieve (best, worst, latest)",
-          "schema": {
-            "type": "string",
-            "enum": ["best", "worst", "latest"],
-            "default": "latest"
-          }
-        },
-        {
-          "in": "query",
-          "name": "limit",
-          "required": false,
-          "description": "Number of feedback results to return",
-          "schema": {
-            "type": "integer",
-            "default": 3
-          }
-        }
-      ],
-      "responses": {
-        "200": {
-          "description": "List of feedback entries",
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "properties": {
-                    "ipAddress": { "type": "string" },
-                    "summary": { "type": "string" },
-                    "rating": { "type": "number" },
-                    "feedback": { "type": "string" },
-                    "timestamp": { "type": "string", "format": "date-time" }
-                  }
-                }
-              }
-            }
-          }
-        },
-        "500": {
-          "description": "Failed to retrieve feedback"
-        }
-      }
-    }
-  }
-
-
-  },
-  "components" : {
-    "securitySchemes" : {
-      "ApiKeyAuth" : {
-        "type" : "apiKey",
-        "in" : "header",
-        "name" : "X-API-Key",
-        "description" : "Partner API key for authentication. Required for STIX import endpoint."
-      }
-    },
-    "schemas" : {
-      "AddressItem" : {
-        "type" : "object",
-        "required" : [ "id", "address", "source", "type", "updated", "timestamp" ],
-        "properties" : {
-          "id" : {
-            "type" : "integer",
-            "format" : "int",
-            "example" : 4
-          },
-          "data":{
-            "type":"string",
-            "example":"24.1.124.227"
-          },
-          "source" : {
-            "type" : "string",
-            "format" : "url",
-            "example" : "https://www.dshield.org/block.txt"
-          },
-          "type" : {
-            "type" : "string",
-            "example" : "IP or SUBNET"
-          },
-          "updated" : {
-            "type" : "string",
-            "format" : "date-time",
-            "example" : "2023-10-12 13:15:25"
-          },
-          "timestamp" : {
-            "type" : "string",
-            "format" : "timestamp",
-            "example" : "1697119500.098213"
+            },
+            "400": { "description": "Missing or invalid `ipAddress` field." },
+            "500": { "description": "Upstream data fetch failed, or the LLM service was unreachable." }
           }
         }
       },
-      "CredentialItem" : {
-        "type": "object",
-        "properties": {
-          "_id": {
-            "type": "string"
-          },
-          "source": {
-            "type": "string"
-          },
-          "updated": {
-            "type": "string",
-            "format": "date"  
-          },
-          "timestamp": {
-            "type": "number",
-            "format": "double"  
-          },
-          "destination_port": {
-            "type": "integer"
-          },
-          "protocol": {
-            "type": "string"
-          },
-          "credentials": {
-            "type": "object",
-            "properties": {
-              "source_ip": {
-                "type": "91.92.253.23"
-              },
-              "usernames": {
-                "type": "array",
-                "items": {
-                  "type": "string"
+      "/analysis/feedback": {
+        "post": {
+          "tags": ["Analysis"],
+          "summary": "Submit feedback on an analysis result",
+          "operationId": "submitFeedback",
+          "description": "Records a rating (1–5) and optional free-text feedback for an LLM-generated analysis. This feedback is fed back into future `/analysis/` calls for the same IP so the model can learn from user corrections.",
+          "requestBody": {
+            "required": true,
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["ipAddress", "summary", "rating"],
+                  "properties": {
+                    "ipAddress": {
+                      "type": "string",
+                      "description": "IP that the analysis was about.",
+                      "example": "8.8.8.8"
+                    },
+                    "summary": {
+                      "type": "string",
+                      "description": "The analysis result being rated (verbatim, so the feedback stays attached to the exact text).",
+                      "example": "This IP is clean and belongs to Google's public DNS."
+                    },
+                    "rating": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 5,
+                      "description": "Rating from 1 (poor) to 5 (excellent).",
+                      "example": 4
+                    },
+                    "feedback": {
+                      "type": "string",
+                      "description": "Optional free-text comment.",
+                      "example": "Clear and accurate, but could mention the AS."
+                    }
+                  }
                 }
-              },
-              "passwords": {
-                "type": "array",
-                "items": {
-                  "type": "string"
+              }
+            }
+          },
+          "responses": {
+            "201": {
+              "description": "Feedback stored.",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "success": { "type": "boolean", "example": true },
+                      "insertedId": { "type": "string", "example": "67e3d468803e3501ba8c3e66" }
+                    }
+                  }
+                }
+              }
+            },
+            "400": { "description": "Missing required fields (`ipAddress`, `summary`, `rating`)." },
+            "500": { "description": "Failed to persist feedback." }
+          }
+        }
+      },
+      "/analysis/getFeedback": {
+        "get": {
+          "tags": ["Analysis"],
+          "summary": "Retrieve previously-submitted analysis feedback",
+          "operationId": "getFeedback",
+          "description": "Returns stored feedback entries, optionally filtered by IP. The `type` parameter selects between most recent (`latest`), highest-rated (`best`) or lowest-rated (`worst`).",
+          "parameters": [
+            {
+              "in": "query",
+              "name": "ipAddress",
+              "required": false,
+              "description": "If supplied, only feedback for this IP is returned.",
+              "schema": { "type": "string", "example": "8.8.8.8" }
+            },
+            {
+              "in": "query",
+              "name": "type",
+              "required": false,
+              "description": "Ordering / selection strategy.",
+              "schema": {
+                "type": "string",
+                "enum": ["best", "worst", "latest"],
+                "default": "latest"
+              }
+            },
+            {
+              "in": "query",
+              "name": "limit",
+              "required": false,
+              "description": "Maximum number of entries to return.",
+              "schema": { "type": "integer", "default": 3, "minimum": 1 }
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "Array of feedback entries.",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "_id": { "type": "string" },
+                        "ipAddress": { "type": "string" },
+                        "summary": { "type": "string" },
+                        "rating": { "type": "number" },
+                        "feedback": { "type": "string" },
+                        "timestamp": { "type": "string", "format": "date-time" }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "500": { "description": "Failed to retrieve feedback." }
+          }
+        }
+      },
+      "/stix": {
+        "post": {
+          "tags": ["STIX Import"],
+          "summary": "Import a STIX 2.1 bundle from a partner",
+          "operationId": "importStixBundle",
+          "description": "Accepts a STIX 2.1 bundle and stores it (with per-type object counts) in the threat database. Supports any STIX 2.1 object type — `vulnerability`, `identity`, `report`, `threat-actor`, `malware`, `indicator`, etc.\n\nThis endpoint is **authenticated**: include a valid partner key in the `X-API-Key` header. The allowed keys are configured via the `ALLOWED_API_KEYS` environment variable.",
+          "security": [{ "ApiKeyAuth": [] }],
+          "parameters": [
+            {
+              "in": "header",
+              "name": "X-API-Key",
+              "description": "Partner API key.",
+              "required": true,
+              "schema": { "type": "string", "example": "partner1-secret-key" }
+            }
+          ],
+          "requestBody": {
+            "required": true,
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["type", "id"],
+                  "properties": {
+                    "type": { "type": "string", "example": "bundle" },
+                    "id": { "type": "string", "example": "bundle--eea2e291-965c-58e7-baf6-273ffef87ffa" },
+                    "objects": {
+                      "type": "array",
+                      "items": { "type": "object" },
+                      "example": [
+                        {
+                          "type": "vulnerability",
+                          "spec_version": "2.1",
+                          "id": "vulnerability--20dc53e3-c68a-5073-ade6-556bb445e9d3",
+                          "name": "CVE-2025-14847"
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "responses": {
+            "200": {
+              "description": "Bundle stored.",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "success": { "type": "boolean" },
+                      "message": { "type": "string" },
+                      "bundle_id": { "type": "string" },
+                      "object_count": { "type": "integer" }
+                    }
+                  }
+                }
+              }
+            },
+            "400": { "description": "Body is missing or is not a STIX bundle (`type` must be `bundle`)." },
+            "401": { "description": "Missing `X-API-Key` header." },
+            "403": { "description": "API key not recognised." },
+            "500": { "description": "Failed to persist the bundle." }
+          }
+        }
+      }
+    },
+    "components": {
+      "securitySchemes": {
+        "ApiKeyAuth": {
+          "type": "apiKey",
+          "in": "header",
+          "name": "X-API-Key",
+          "description": "Partner API key for authentication. Required by the STIX import endpoint."
+        }
+      },
+      "schemas": {
+        "AddressItem": {
+          "type": "object",
+          "description": "One source record indicating that an address (IP or CIDR subnet) appeared in a threat-intel feed at a given time.",
+          "required": ["_id", "source", "type", "updated", "timestamp", "data"],
+          "properties": {
+            "_id": {
+              "type": "string",
+              "description": "MongoDB ObjectId of the record.",
+              "example": "67e3d468803e3501ba8c3e66"
+            },
+            "source": {
+              "type": "string",
+              "format": "uri",
+              "description": "URL of the threat-intel feed, or the name of the internal honeypot, that contributed the record.",
+              "example": "https://www.dshield.org/block.txt"
+            },
+            "type": {
+              "type": "string",
+              "enum": ["IP", "SUBNET"],
+              "description": "Whether this record lists an individual IP or a CIDR subnet."
+            },
+            "updated": {
+              "type": "string",
+              "description": "Date or datetime when the source feed was last published. Format varies by source: either `YYYY-MM-DD` or `YYYY-MM-DD HH:MM:SS`.",
+              "example": "2025-10-12 13:15:25"
+            },
+            "timestamp": {
+              "type": "number",
+              "description": "Unix epoch (seconds) corresponding to `updated`.",
+              "example": 1697119500.098213
+            },
+            "data": {
+              "type": "string",
+              "description": "The specific matching IP or subnet (filled in from the query — not necessarily the full list stored in the source feed).",
+              "example": "24.1.124.227"
+            }
+          }
+        },
+        "CredentialItem": {
+          "type": "object",
+          "description": "One credential-capture record from a Heralding honeypot session.",
+          "required": ["_id", "source", "updated", "timestamp", "destination_port", "protocol", "credentials"],
+          "properties": {
+            "_id": { "type": "string", "description": "MongoDB ObjectId." },
+            "source": {
+              "type": "string",
+              "description": "Name of the honeypot that produced the record.",
+              "example": "Montimage Credentials HoneyPot"
+            },
+            "updated": {
+              "type": "string",
+              "description": "Date of the capture, `YYYY-MM-DD`.",
+              "example": "2025-03-15"
+            },
+            "timestamp": {
+              "type": "number",
+              "description": "Unix epoch (seconds) of the capture.",
+              "example": 1742044800
+            },
+            "destination_port": {
+              "type": "integer",
+              "description": "TCP/UDP port the attacker connected to.",
+              "example": 22
+            },
+            "protocol": {
+              "type": "string",
+              "description": "Application-layer protocol exposed by the honeypot.",
+              "example": "ssh"
+            },
+            "credentials": {
+              "type": "object",
+              "required": ["source_ip", "usernames", "passwords"],
+              "properties": {
+                "source_ip": {
+                  "type": "string",
+                  "description": "IPv4 of the attacking host.",
+                  "example": "91.92.253.23"
+                },
+                "usernames": {
+                  "type": "array",
+                  "items": { "type": "string" },
+                  "description": "Distinct usernames the attacker tried.",
+                  "example": ["root", "admin"]
+                },
+                "passwords": {
+                  "type": "array",
+                  "items": { "type": "string" },
+                  "description": "Distinct passwords the attacker tried.",
+                  "example": ["123456", "password"]
                 }
               }
             }
           }
         }
-      }              
+      }
     }
-  }
-},
-"apis": ["./routes/*.js"]
+  },
+  "apis": ["./routes/*.js"]
 }

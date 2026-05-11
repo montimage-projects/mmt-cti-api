@@ -77,6 +77,40 @@ async function checkSubnet(client, subnet) {
     return dataResponse;
 }
 
+router.get('/ip/:address', async (req, res) => {
+    const { address } = req.params;
+    if (!ipPattern.test(address)) {
+        return res.status(400).json({ error: 'bad input parameter' });
+    }
+    try {
+        const client = new MongoClient(url);
+        await client.connect();
+        const dataResponse = await checkIP(client, address);
+        await client.close();
+        res.json(dataResponse);
+    } catch (error) {
+        console.error('Error:', error);
+        res.status(500).json({ error: 'Internal server error', details: error.message });
+    }
+});
+
+router.get('/subnet/:address', async (req, res) => {
+    const { address } = req.params;
+    if (!subnetPattern.test(address)) {
+        return res.status(400).json({ error: 'bad input parameter' });
+    }
+    try {
+        const client = new MongoClient(url);
+        await client.connect();
+        const dataResponse = await checkSubnet(client, address);
+        await client.close();
+        res.json(dataResponse);
+    } catch (error) {
+        console.error('Error:', error);
+        res.status(500).json({ error: 'Internal server error', details: error.message });
+    }
+});
+
 router.get('/check/:address', async (req, res) => {
     let { address } = req.params;
     let dataResponse = [];

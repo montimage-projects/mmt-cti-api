@@ -3,7 +3,7 @@ require('dotenv').config({ path: path.resolve(__dirname, '../../../.env') });
 const express = require("express");
 const router = express.Router();
 const { gatherIpData } = require("../services/abuseService");
-const { analyzeWithLLM } = require("../services/llmService");  // Function to analyze data with LLM
+const { analyzeWithLlama } = require("../services/llmService");  // Function to analyze data with LLM
 const { saveFeedback, getFeedback } = require("../services/feedbackService");
 
 // POST /analysis - Analyze IP address using AbuseIPDB and LLM
@@ -26,7 +26,7 @@ router.post("/analysis", async (req, res) => {
     // const OTXData         = fetchData.OTXData;
     
     // Analyze the IP data with LLM
-    const Result = await analyzeWithLLM(ipAddress, fetchData ,userPrompt, feedback);
+    const Result = await analyzeWithLlama(ipAddress, fetchData ,userPrompt, feedback);
 
     // Return the results from both AbuseIPDB and LLM
     res.json({ fetchData, Result });
