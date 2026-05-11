@@ -2,96 +2,17 @@ const express = require("express")
 const dns = require('dns');
 const { MongoClient } = require('mongodb')
 const { isInSubnet } = require('is-in-subnet');
+const { authMiddleware } = require('../services/authMiddleware')
 const router = express.Router()
 
 const url = 'mongodb://localhost:27017/CTI';
 
+const ipPattern = /^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
 
-//defining route to check if an IP is in the database 
-router.get('/ip/:address', async (req, res) => {
-    let { address } = req.params;
+const subnetPattern = /^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\/(3[0-2]|[12]?[0-9])$/;
 
-    // Regular Expression to check IP IPv4 format
-    const ipPattern = /^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
-    let dataResponse
+const domainPattern = /^[a-zA-Z0-9.-]+\.[a-zA-Z]+$/;
 
-    if (ipPattern.test(address)) {
-        try {
-            //opening connections
-            const client = new MongoClient(url);
-            await client.connect();
-            const db = client.db();
-            const collection = db.collection('dangerousIPs');
-            
-            // Using 'find' to 'toArray' to obtain results
-            const c = await collection.countDocuments()
-            dataResponse = await collection.find({
-                "type":"IP", 
-                "data": {$elemMatch: {$eq: address}}
-            }).toArray();
-            
-            for(let obj of dataResponse){
-                obj.data = address
-            }
-            
-            // Closing Conection
-            await client.close();
-            
-            
-        } catch (error) {
-            console.error('Error in conecting to MongoDB server', error);
-        }
-
-        res.json(dataResponse)
-    } else {
-        res.status(400).json({ error: 'bad input parameter' });
-    }
-});
-
-
-//defining route to check if a given subnet is in the database
-router.get('/subnet/:address', async (req, res) => {
-    const { address } = req.params;
-
-    // Regular Expression to check IP IPv4 format
-    const subnetPattern = /^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\/(3[0-2]|[12]?[0-9])$/;
-
-    let dataResponse
-
-    if (subnetPattern.test(address)) {
-        try {
-            //opening connections
-            const client = new MongoClient(url);
-            await client.connect();
-            const db = client.db();
-            const collection = db.collection('dangerousIPs');
-            
-            // Using 'find' to 'toArray' to obtain results
-            const c = await collection.countDocuments()
-            dataResponse = await collection.find({
-                "type":"SUBNET", 
-                "data": {$elemMatch: {$eq: address}}
-            }).toArray();
-            
-            for(let obj of dataResponse){
-                obj.data = address
-            }
-            
-            // Closing Conection
-            await client.close();
-            
-            
-        } catch (error) {
-            console.error('Error in conecting to MongoDB server', error);
-        }
-
-        res.json(dataResponse)
-    } else {
-        res.status(400).json({ error: 'bad input parameter' });
-    }  
-});
-
-//takes the object of the database and checks in the list of subnets if an IP is inside of any subnet
 function checkIPInSubnets(objects, ip) {
     let responseObjects = []
     for (const doc of objects) {    
@@ -105,7 +26,6 @@ function checkIPInSubnets(objects, ip) {
     return responseObjects;
 }
 
-//DNS resolution async function
 async function resolveDNS(address) {
     return new Promise((resolve, reject) => {
     dns.lookup(address, (err, ip, family) => {
@@ -118,105 +38,119 @@ async function resolveDNS(address) {
     });
 }
 
-//general function that handles IPs, SUBNETs, domain names and also checks for the IP inside a subnet
-router.get('/address/:address', async (req, res) => {
+async function checkIP(client, ip) {
+    const db = client.db();
+    const collection = db.collection('dangerousIPs');
+    
+    let dataResponse = await collection.find({
+        "type":"IP", 
+        "data": {$elemMatch: {$eq: ip}}
+    }).toArray();
+    
+    for(let obj of dataResponse){
+        obj.data = ip
+    }
+    
+    let allSubnets = await collection.find({
+        "type":"SUBNET", 
+    }).toArray();
+
+    const matchedSubnets = checkIPInSubnets(allSubnets, ip)
+    dataResponse = dataResponse.concat(matchedSubnets)
+    
+    return dataResponse;
+}
+
+async function checkSubnet(client, subnet) {
+    const db = client.db();
+    const collection = db.collection('dangerousIPs');
+    
+    let dataResponse = await collection.find({
+        "type":"SUBNET", 
+        "data": {$elemMatch: {$eq: subnet}}
+    }).toArray();
+    
+    for(let obj of dataResponse){
+        obj.data = subnet
+    }
+    
+    return dataResponse;
+}
+
+router.get('/check/:address', async (req, res) => {
     let { address } = req.params;
     let dataResponse = [];
     
-    // Regular Expression to check IP IPv4 format
-    const ipPattern = /^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
-    
-    // Regular Expression to check SUBNET format
-    const subnetPattern = /^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\/(3[0-2]|[12]?[0-9])$/;
-    
-    // Regular expression for domains
-    const domainPattern = /^[a-zA-Z0-9.-]+\.[a-zA-Z]+$/;
-
-    //waits for DNS resolution
     try {
-        
         if(domainPattern.test(address)){
             address = await resolveDNS(address);
         }
         
-        //checks for IPv4 pattern
+        const client = new MongoClient(url);
+        await client.connect();
+        
         if(ipPattern.test(address)) {
-            try {
-                //opening connections
-                const client = new MongoClient(url);
-                await client.connect();
-                const db = client.db();
-                const collection = db.collection('dangerousIPs');
-                
-                //looking for the exact IP in the database 
-                dataResponse = await collection.find({
-                    "type":"IP", 
-                    "data": {$elemMatch: {$eq: address}}
-                }).toArray();
-                
-                for(let obj of dataResponse){
-                    obj.data = address
-                }
-                
-                //TODO -> CHECKING IF A SPECIALIZED QUERY
-                //looking for the IP inside a subnet in the database
-                let allSubnets = await collection.find({
-                    "type":"SUBNET", 
-                }).toArray();
-
-                const matchedSubnets = checkIPInSubnets(allSubnets, address)
-                dataResponse = dataResponse.concat(matchedSubnets)
-
-                // Closing Conection
-                await client.close();
-                res.json(dataResponse)
-                
-            } catch (error) {
-                console.error('Error in conecting to MongoDB server', error);
-                res.status(400).json({ error: 'Database connection error' });
-            }
+            dataResponse = await checkIP(client, address);
         }
-
-        // Handle subnet
         else if(subnetPattern.test(address)) {
-            
-            try {
-                //opening connections
-                const client = new MongoClient(url);
-                await client.connect();
-                const db = client.db();
-                const collection = db.collection('dangerousIPs');
-                
-                // Using 'find' to 'toArray' to obtain results
-                const c = await collection.countDocuments()
-                dataResponse = await collection.find({
-                    "type":"SUBNET", 
-                    "data": {$elemMatch: {$eq: address}}
-                }).toArray();
-                
-                for(let obj of dataResponse){
-                    obj.data = address
-                }
-                
-                // Closing Conection
-                await client.close();
-                
-                
-            } catch (error) {
-                console.error('Error in conecting to MongoDB server', error);
-            }
-    
-            res.json(dataResponse)
+            dataResponse = await checkSubnet(client, address);
         }
-        else{
-            
-            res.status(400).json({ error: 'bad input parameter', "Returned address": address });
+        else {
+            await client.close();
+            return res.status(400).json({ error: 'Invalid address format', "Provided": req.params.address });
         }
         
+        await client.close();
+        res.json(dataResponse)
+        
     } catch (error) {
-        res.status(400).json({ "Internal server error": error });
+        console.error('Error:', error);
+        res.status(400).json({ error: 'Internal server error', details: error.message });
     }
 });
 
+router.post('/stix', authMiddleware, async (req, res) => {
+    try {
+        const bundle = req.body;
+        
+        if (!bundle || !bundle.type || bundle.type !== 'bundle') {
+            return res.status(400).json({ error: 'Invalid STIX bundle format' });
+        }
+        
+        const client = new MongoClient(url);
+        await client.connect();
+        const db = client.db();
+        const collection = db.collection('stix_bundles');
+        
+        const bundleData = {
+            bundle_id: bundle.id,
+            created: new Date(),
+            object_count: bundle.objects ? bundle.objects.length : 0,
+            objects: bundle.objects || [],
+            object_types: {}
+        };
+        
+        if (bundle.objects && Array.isArray(bundle.objects)) {
+            for (const obj of bundle.objects) {
+                const type = obj.type;
+                bundleData.object_types[type] = (bundleData.object_types[type] || 0) + 1;
+            }
+        }
+        
+        await collection.insertOne(bundleData);
+        await client.close();
+        
+        res.json({ 
+            success: true, 
+            message: 'STIX bundle received and stored',
+            bundle_id: bundle.id,
+            object_count: bundleData.object_count
+        });
+        
+    } catch (error) {
+        console.error('Error processing STIX bundle:', error);
+        res.status(500).json({ error: 'Failed to process STIX bundle', details: error.message });
+    }
+});
 
 module.exports = router;

@@ -21,4 +21,4 @@ async function analyzeWithLlama(ipAddress, ipData, userPrompt,feedback) {
   }
 }
 
-module.exports = { analyzeWithLLM };
+module.exports = { analyzeWithLlama };

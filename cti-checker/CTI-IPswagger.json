@@ -2,7 +2,7 @@
   "openapi" : "3.1.0",
   "servers" : [ {
     "description" : "CTI Check API",
-    "url" : "http://51.178.36.152:4000"
+    "url" : "http://localhost:4000"
   } ],
   "info" : {
     "description" : "API to check CTI available info.",
@@ -13,9 +13,13 @@
     "name" : "Address Checker",
     "description" : "Operations to check if an IP is in a black-list"
   },
+{
+    "name": "Address Checker",
+    "description": "Operations to check if an IP is in a black-list"
+  },
   {
-    "name" : "Credential Checker",
-    "description" : "Operations to check if a username or password has been used by bot in our HoneyPot"
+    "name": "STIX Import",
+    "description": "Operations to receive STIX bundles from partners"
   },
   {
     "name" : "Chart Generator",
@@ -132,24 +136,25 @@
         }
       }
     },
-    "/address/{ADDRESS}" : {
+    "/check/{ADDRESS}" : {
       "get" : {
         "tags" : [ "Address Checker" ],
-        "summary" : "searches database for a matching address",
-        "operationId" : "searchDomain",
-        "description" : "By passing in the appropriate options (address/IP/subnet in path), you can search for\nthe given address in IPv4, Subnet or domain name in our database.\n",
+        "summary" : "Unified endpoint to check IP, subnet, or domain",
+        "operationId" : "checkAddress",
+        "description" : "Checks if the given address (IPv4, subnet, or domain) exists in the dangerous IP database. Supports DNS resolution for domains and subnet matching for IPs.",
         "parameters" : [ {
           "in" : "path",
           "name" : "ADDRESS",
-          "description" : "pass the Domain address to be checked in our database",
+          "description" : "pass an IP address, subnet (CIDR), or domain name to be checked",
           "required" : true,
           "schema" : {
-            "type" : "string"
+            "type" : "string",
+            "example" : "192.168.1.1"
           }
         } ],
         "responses" : {
           "200" : {
-            "description" : "search results matching the same Domain",
+            "description" : "search results matching the address",
             "content" : {
               "application/json" : {
                 "schema" : {
@@ -162,7 +167,101 @@
             }
           },
           "400" : {
-            "description" : "bad input parameter"
+            "description" : "invalid address format"
+          }
+        }
+      }
+    },
+    "/stix" : {
+      "post" : {
+        "tags" : [ "STIX Import" ],
+        "summary" : "Receive STIX bundle from partner",
+        "operationId" : "importStixBundle",
+        "description" : "Upload a STIX 2.1 bundle to import threat intelligence data. Supports vulnerability, identity, report, threat-actor, malware, and other STIX object types. Requires API key authentication.",
+        "security" : [ {
+          "ApiKeyAuth" : [ ]
+        } ],
+        "parameters" : [ {
+          "in" : "header",
+          "name" : "X-API-Key",
+          "description" : "Partner API key required for authentication",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "example" : "partner1-secret-key"
+          }
+        } ],
+        "requestBody" : {
+          "required" : true,
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "type" : "object",
+                "properties" : {
+                  "type" : {
+                    "type" : "string",
+                    "example" : "bundle"
+                  },
+                  "id" : {
+                    "type" : "string",
+                    "example" : "bundle--eea2e291-965c-58e7-baf6-273ffef87ffa"
+                  },
+                  "objects" : {
+                    "type" : "array",
+                    "items" : {
+                      "type" : "object"
+                    },
+                    "example" : [
+                      {
+                        "type": "vulnerability",
+                        "spec_version": "2.1",
+                        "id": "vulnerability--20dc53e3-c68a-5073-ade6-556bb445e9d3",
+                        "name": "CVE-2025-14847"
+                      }
+                    ]
+                  }
+                },
+                "required" : [ "type", "id" ]
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "STIX bundle imported successfully",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "bundle_id" : {
+                      "type" : "string"
+                    },
+                    "object_count" : {
+                      "type" : "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400" : {
+            "description" : "Invalid STIX bundle format"
+          },
+          "401" : {
+            "description" : "Missing API key. Provide X-API-Key header."
+          },
+          "403" : {
+            "description" : "Invalid API key"
+          },
+          "500" : {
+            "description" : "Failed to process STIX bundle"
           }
         }
       }
@@ -468,6 +567,14 @@
 
   },
   "components" : {
+    "securitySchemes" : {
+      "ApiKeyAuth" : {
+        "type" : "apiKey",
+        "in" : "header",
+        "name" : "X-API-Key",
+        "description" : "Partner API key for authentication. Required for STIX import endpoint."
+      }
+    },
     "schemas" : {
       "AddressItem" : {
         "type" : "object",
