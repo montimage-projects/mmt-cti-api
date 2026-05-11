@@ -1,0 +1,6 @@
+node_modules/
+.env
+*.log
+
+# Generated chart artifact (rewritten on every /chart/* request)
+cti-checker/imgs/chart.png
