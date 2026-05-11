@@ -9,8 +9,9 @@ const swaggerUI = require("swagger-ui-express")
 const swaggerJsDoc = require("swagger-jsdoc")
 const swaggerFile = require("./CTI-IPswagger.json")
 
-//port setting
+//port setting -- bind to localhost only; public access is via Apache reverse-proxy at https://cti.montimage.eu
 const PORT = process.env.PORT || 4000
+const HOST = process.env.HOST || "127.0.0.1"
 
 //swagger file definitions
 const specs = swaggerJsDoc(swaggerFile)
@@ -34,5 +35,5 @@ app.use("/", credentialCheckerRouter)
 // Chart path
 app.use('/', chartGenerator);
 
-// listening to port 
-app.listen(PORT, () => console.log("Server running on port " + PORT))
+// listening to port
+app.listen(PORT, HOST, () => console.log(`Server running on ${HOST}:${PORT}`))
