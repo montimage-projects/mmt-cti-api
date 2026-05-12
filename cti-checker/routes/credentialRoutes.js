@@ -1,8 +1,11 @@
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '../../../.env') });
 const express = require("express")
 const { MongoClient } = require('mongodb')
 const router = express.Router()
 
-const url = 'mongodb://localhost:27017/CTI';
+const MONGO_URL = process.env.MONGO_URL;
+const DB_NAME = process.env.DB_NAME;
 
 //defining route to check if a password has been used by a bot in the honeyPot
 router.get('/password/:password', async (req, res) => {
@@ -12,9 +15,9 @@ router.get('/password/:password', async (req, res) => {
     try {
         
         //opening connections
-        const client = new MongoClient(url);
+        const client = new MongoClient(MONGO_URL);
         await client.connect();
-        const db = client.db();
+        const db = client.db(DB_NAME);
         const collection = db.collection('weakCredentials');
         
         //searcing for password
@@ -49,9 +52,9 @@ router.get('/username/:username', async (req, res) => {
     try {
         
         //opening connections
-        const client = new MongoClient(url);
+        const client = new MongoClient(MONGO_URL);
         await client.connect();
-        const db = client.db();
+        const db = client.db(DB_NAME);
         const collection = db.collection('weakCredentials');
         
         //searcing for password

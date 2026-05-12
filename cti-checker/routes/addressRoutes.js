@@ -1,3 +1,5 @@
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '../../../.env') });
 const express = require("express")
 const dns = require('dns');
 const { MongoClient } = require('mongodb')
@@ -5,7 +7,8 @@ const { isInSubnet } = require('is-in-subnet');
 const { authMiddleware } = require('../services/authMiddleware')
 const router = express.Router()
 
-const url = 'mongodb://localhost:27017/CTI';
+const MONGO_URL = process.env.MONGO_URL;
+const DB_NAME = process.env.DB_NAME;
 
 const ipPattern = /^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
 
@@ -39,7 +42,7 @@ async function resolveDNS(address) {
 }
 
 async function checkIP(client, ip) {
-    const db = client.db();
+    const db = client.db(DB_NAME);
     const collection = db.collection('dangerousIPs');
     
     let dataResponse = await collection.find({
@@ -62,7 +65,7 @@ async function checkIP(client, ip) {
 }
 
 async function checkSubnet(client, subnet) {
-    const db = client.db();
+    const db = client.db(DB_NAME);
     const collection = db.collection('dangerousIPs');
     
     let dataResponse = await collection.find({
@@ -83,7 +86,7 @@ router.get('/ip/:address', async (req, res) => {
         return res.status(400).json({ error: 'bad input parameter' });
     }
     try {
-        const client = new MongoClient(url);
+        const client = new MongoClient(MONGO_URL);
         await client.connect();
         const dataResponse = await checkIP(client, address);
         await client.close();
@@ -100,7 +103,7 @@ router.get('/subnet/:address', async (req, res) => {
         return res.status(400).json({ error: 'bad input parameter' });
     }
     try {
-        const client = new MongoClient(url);
+        const client = new MongoClient(MONGO_URL);
         await client.connect();
         const dataResponse = await checkSubnet(client, address);
         await client.close();
@@ -120,7 +123,7 @@ router.get('/check/:address', async (req, res) => {
             address = await resolveDNS(address);
         }
         
-        const client = new MongoClient(url);
+        const client = new MongoClient(MONGO_URL);
         await client.connect();
         
         if(ipPattern.test(address)) {
@@ -151,9 +154,9 @@ router.post('/stix', authMiddleware, async (req, res) => {
             return res.status(400).json({ error: 'Invalid STIX bundle format' });
         }
         
-        const client = new MongoClient(url);
+        const client = new MongoClient(MONGO_URL);
         await client.connect();
-        const db = client.db();
+        const db = client.db(DB_NAME);
         const collection = db.collection('stix_bundles');
         
         const bundleData = {
